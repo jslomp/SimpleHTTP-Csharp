@@ -1,17 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WebFunctions
+namespace CustomTools
 {
     class SimpleHTTP
     {
+        
 
+        
         public Dictionary<string, string> public_cookies = null;
+        
+
+
         private string url;
 
         public SimpleHTTP(string url)
@@ -21,21 +28,89 @@ namespace WebFunctions
         public Dictionary<string, string> cookies = null;
         public void setCookies(Dictionary<string, string> cookies = null)
         {
-            this.public_cookies = cookies;
+            this.cookies = cookies;
         }
+        List<KeyValuePair<string, string>> myHeaders = new List<KeyValuePair<string, string>>();
+        public void setHeader(string key, string value)
+        {
+            KeyValuePair<string, string> kv = new KeyValuePair<string, string>(key, value);
+            myHeaders.Add(kv);
+        }
+        private string GetContentType(string fileName)
+
+        {
+
+            string contentType = "application/octetstream";
+
+            string ext = System.IO.Path.GetExtension(fileName).ToLower();
+
+            Microsoft.Win32.RegistryKey registryKey = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(ext);
+
+            if (registryKey != null && registryKey.GetValue("Content Type") != null)
+            {
+                contentType = registryKey.GetValue("Content Type").ToString();
+            }
+
+            return contentType;
+
+        
+
+    }
+
+    List<Dictionary<string, string>> PostingFields = new List<Dictionary<string, string>>();
+    public void addPostFile(string key, string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                Dictionary<string, string> postObj = new Dictionary<string, string>();
+                postObj.Add("Key", key);
+                postObj.Add("Value", filePath);
+                postObj.Add("type", "file");
+                PostingFields.Add(postObj);
+            }
+        }
+        public void addPostField(string key, string value)
+        {
+            generated_post_data += "--"+splittoken+"\n";
+            generated_post_data += "Content-Disposition: form-data; name=\""+key+"\"\n";
+            generated_post_data += "\n";
+            generated_post_data += value+"\n";
+
+            Dictionary<string, string> postObj = new Dictionary<string, string>();
+            postObj.Add("Key", key);
+            postObj.Add("Value", value);
+            postObj.Add("type", "text");
+            PostingFields.Add(postObj);
+
+        }
+        string generated_post_data = "";
+        string splittoken = "----WebKitFormBoundary7frcLyNMUBKMSK8z";
         public string send(string postData = "")
         {
+
+            if(postData == "" && generated_post_data!="")
+            {
+                postData = generated_post_data+"\n";
+                postData += "--" + splittoken + "--";
+            }
             Console.WriteLine("---start call---");
             Console.WriteLine("URL=" + url + "");
             string responseBody = "";
-            string content_type = "application/json";
+            
+            string content_type = "multipart/form-data; boundary=" + splittoken +"";
             if (postData.StartsWith("{"))
             {
                 content_type = "application/json";
             }
 
-            //StringContent requestContent = new StringContent(postData, Encoding.UTF8, content_type);
+            if (postData.Contains("="))
+            {
 
+            }
+
+
+            //StringContent requestContent = new StringContent(postData, Encoding.UTF8, content_type);
+            
             HttpClient client = new HttpClient(new HttpClientHandler() { UseCookies = false, AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate });
 
             var request = new HttpRequestMessage()
@@ -46,7 +121,19 @@ namespace WebFunctions
 
             request.Headers.TryAddWithoutValidation("Content-Type", content_type);
             request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip");
-            request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
+
+            string ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36";
+            foreach(KeyValuePair<string,string> head in myHeaders)
+            {
+                request.Headers.TryAddWithoutValidation(head.Key, head.Value);
+                Console.WriteLine("setheader: " + head.Key + " = " + head.Value + "");
+                if(head.Key == "User-Agent"){
+                    ua = head.Value;
+                }
+            }
+
+            request.Headers.TryAddWithoutValidation("User-Agent", ua);
+
             string cookie_string = "";
 
             if (cookies != null && cookies.Count > 0)
@@ -68,7 +155,30 @@ namespace WebFunctions
 
             //MessageBox.Show(request.Headers.ToString());
 
-            request.Content = new StringContent(postData, Encoding.UTF8, content_type);
+            //string content = "";
+
+            if (content_type == "application/json")
+            {
+                request.Content = new StringContent(postData, Encoding.UTF8, content_type);
+            }
+            else
+            {
+                var requestContent = new MultipartFormDataContent();
+                foreach (Dictionary<string, string> field in PostingFields) {
+                    if (field["type"] == "text")
+                    {
+                        StringContent textcontent = new StringContent(field["Value"], Encoding.UTF8);
+                        requestContent.Add(textcontent, field["Key"]);
+                    }
+                    if (field["type"] == "file")
+                    {
+                        var imageContent = new ByteArrayContent(File.ReadAllBytes(field["Value"]));
+                        imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse(GetContentType(field["Value"]));
+                        requestContent.Add(imageContent, field["Key"], Path.GetFileName(field["Value"]));
+                    }
+                }
+                request.Content = requestContent;
+            }
             Console.WriteLine("POST:-----");
             Console.WriteLine(postData);
 
@@ -82,9 +192,10 @@ namespace WebFunctions
             }
             catch (Exception e)
             {
-                Console.WriteLine("request");
+                Console.WriteLine("request", e);
                 Console.WriteLine(request.Headers);
-
+                Console.WriteLine(e.Data);
+                
                 return "";
             }
 
@@ -127,12 +238,12 @@ namespace WebFunctions
 
         }
 
-        public Dictionary<string, string> getCookies()
+        public Dictionary<string,string> getCookies()
         {
             return public_cookies;
         }
 
     }
 
-
+    
 }
