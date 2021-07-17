@@ -85,7 +85,12 @@ namespace CustomTools
         }
         string generated_post_data = "";
         string splittoken = "----WebKitFormBoundary7frcLyNMUBKMSK8z";
+
         public string send(string postData = "")
+        {
+            return sendGetBytes(postData).ToString();
+        }
+        public byte[] sendGetBytes(string postData = "")
         {
 
             if(postData == "" && generated_post_data!="")
@@ -196,7 +201,7 @@ namespace CustomTools
                 Console.WriteLine(request.Headers);
                 Console.WriteLine(e.Data);
                 
-                return "";
+                return null;
             }
 
 
@@ -226,7 +231,8 @@ namespace CustomTools
                 }
             }
             public_cookies = cookies;
-            responseBody = response.Content.ReadAsStringAsync().Result;
+            byte[] responseBytes = response.Content.ReadAsByteArrayAsync().Result;
+            //responseBody = response.Content.ReadAsStringAsync().Result;
 
 
 
@@ -234,7 +240,7 @@ namespace CustomTools
             Console.WriteLine(responseBody);
             Console.WriteLine("---end call---");
 
-            return responseBody;
+            return responseBytes;
 
         }
 
